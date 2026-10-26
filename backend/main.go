@@ -46,14 +46,27 @@ func main() {
 }
 
 func openDatabase(path string) (*gorm.DB, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
+	directory := filepath.Dir(path)
+	if directory != "." {
+		if err := os.MkdirAll(directory, 0o755); err != nil {
+			return nil, err
+		}
 	}
 
 	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	// One SQLite writer plus concurrent readers avoids lock errors under the
+	// small, single-process API workload used by the demo.
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(0)
+
 	if err := db.AutoMigrate(&Issue{}); err != nil {
 		return nil, err
 	}

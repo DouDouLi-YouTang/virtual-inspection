@@ -30,3 +30,16 @@ web/*.tsbuildinfo
 .DS_Store
 Thumbs.db
 
+# Local verification artifacts
+.hubdata/
+.hubhome/
+.nunit-package/
+.nunit.tgz
+.template-3d/
+.playwright-mcp/
+.unity-check.dll
+.unity-test-check.dll
+unity-*.log
+web-inspection.png
+web-*.png
+

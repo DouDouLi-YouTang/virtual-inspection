@@ -1,0 +1,32 @@
+# Unity generated content
+unity-client/[Ll]ibrary/
+unity-client/[Tt]emp/
+unity-client/[Oo]bj/
+unity-client/[Bb]uild/
+unity-client/[Bb]uilds/
+unity-client/[Ll]ogs/
+unity-client/[Uu]ser[Ss]ettings/
+unity-client/*.csproj
+unity-client/*.sln
+unity-client/*.suo
+unity-client/*.user
+
+# Go
+backend/data/
+backend/inspection-backend
+backend/inspection-backend.exe
+backend/*.test
+backend/*.out
+
+# React
+web/node_modules/
+web/dist/
+web/.vite/
+web/*.tsbuildinfo
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+

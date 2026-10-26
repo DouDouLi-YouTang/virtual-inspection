@@ -10,7 +10,7 @@
 | --- | --- |
 | Unity | Unity 2022.3.62f1 LTS，内置 3D 渲染管线，旧 Input Manager，uGUI |
 | Go | Go 1.27.0，Gin 1.10.1，GORM 1.30.1，纯 Go SQLite 驱动 |
-| React | React 19.1，TypeScript 5.8，Vite 7.3，TanStack Query 5.83 |
+| React | React 19.3，TypeScript 5.8，Vite 7.3，TanStack Query 5.104 |
 | 数据库 | SQLite，固定文件 `backend/data/inspection.db` |
 | Node | v23.11.0，npm 11.6.1 |
 

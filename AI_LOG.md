@@ -316,3 +316,57 @@
 - 修改后采用：输入框聚焦时暂停移动；右键按下锁定鼠标、松开恢复；打开表单释放鼠标。
 - 验证：每次修改后重新执行 Unity Roslyn 编译检查，保持 `UNITY_COMPILE_OK`。
 
+## P-008
+
+- 目标：修复用户用 Unity 打开工程后，测试脚本找不到运行时代码的编译错误。
+
+### Prompt 原文
+
+> 使用unity打开允许后发现报错
+
+附带截图显示 `Assets/Tests/EditMode/IssueApiTests.cs` 中的 8 个错误，均为找不到 `IssuePosition`、`IssueCreatePayload` 或 `IssueApi`。
+
+### 结果
+
+- 修改后采用：为 `Assets/Scripts` 新增 `InspectionApp.Runtime.asmdef`，让运行时代码进入独立程序集。
+- 修改后采用：测试 asmdef 从引用不可靠的 `Assembly-CSharp` 改为引用 `InspectionApp.Runtime`，并恢复 `nunit.framework.dll` 预编译引用。
+- 未采用：没有删除测试或关闭测试程序集来掩盖错误。
+- 验证：在临时工程副本中使用团结引擎 1.11.0 批处理编译，成功生成 `InspectionApp.Runtime.dll` 与 `InspectionApp.Tests.dll`；随后运行 EditMode Test Runner，8 个测试全部通过（0 失败）。
+- 说明：当前编辑器打开的是旧编译状态并进入 Safe Mode，需重新打开工程或退出 Safe Mode 触发重新编译。
+
+## P-009
+
+- 目标：修复 Play Mode 实测发现的视角和优先级问题。
+
+### Prompt 原文
+
+> 实际测下来两个问题，第一个，视角只能上下移动，不能左右移动，第二个问题，优先级只有中和低，没有高
+
+### 结果
+
+- 修改后采用：水平旋转改为作用于相机所属的 `InspectionPlayer` 节点，垂直俯仰仍只作用于相机；两者分开，避免水平旋转作用在无关节点上。
+- 修改后采用：不再使用手写模板的 uGUI `Dropdown`，改为“低 / 中 / 高”三个始终可见的按钮，选中项用橙色高亮。
+- 采用：新增 `LookRotatesPlayerForYawAndCameraForPitch` 和 `PrioritySelectorBuildsLowMediumAndHigh` 两个回归测试。
+- 验证：团结引擎 1.11.0 实际编译通过，EditMode Test Runner 10 个测试全部通过（0 失败）；Go 测试、React 构建/测试/ESLint 继续通过。
+
+## P-010
+
+- 目标：实现题目加分项中的 React 筛选、详情、删除和更易用的 Unity 场景/UI。
+
+### Prompt 原文
+
+> - React 增加筛选、详情或删除；
+> - 更完整、易用的场景操作和 UI；
+>
+> 把这两个需求做一下
+
+### 结果
+
+- 采用：Go 新增 `DELETE /api/issues/{id}`，删除真实 SQLite 记录；补充成功删除、二次删除返回 404 的测试。
+- 采用：React 增加关键词、状态、优先级组合筛选，筛选结果计数和一键清除。
+- 采用：React 增加详情抽屉，展示完整 ID、描述、状态、坐标、上报时间和更新时间；支持点击遮罩、关闭按钮和 Esc 退出，并锁定背景滚动。
+- 采用：React 增加卡片与详情内的删除操作，均使用确认提示，成功后刷新列表。
+- 采用：Unity 启动时从后端恢复已保存标记，点击标记打开详情；增加准星命中反馈、可点击标记的 Trigger Collider 和更清晰的 HUD 提示。
+- 修改后采用：浏览器截图发现卡片底部信息和操作过挤，改为上下两层布局；发现详情抽屉受长页面影响未固定到视口，补充固定定位、独立滚动和滚动锁定。
+- 验证：Go 测试和 `go vet` 通过；React 生产构建、9 个 Vitest 测试和 ESLint 通过；Unity 编译通过，EditMode 10 个测试全部通过；桌面与 390px 浏览器布局实际检查。
+

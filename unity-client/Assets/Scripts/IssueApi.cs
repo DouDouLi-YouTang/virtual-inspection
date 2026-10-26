@@ -32,6 +32,25 @@ public class IssueCreatePayload
 }
 
 [Serializable]
+public class IssueRecord
+{
+    public string id;
+    public string title;
+    public string description;
+    public string priority;
+    public string status;
+    public IssuePosition position;
+    public string createdAt;
+    public string updatedAt;
+}
+
+[Serializable]
+public class IssueListResponse
+{
+    public IssueRecord[] items;
+}
+
+[Serializable]
 public class ApiError
 {
     public string error;
@@ -74,7 +93,7 @@ public sealed class IssueApi
 
     public IEnumerator CreateIssue(
         IssueCreatePayload payload,
-        Action<long, string> completed)
+        Action<long, string, IssueRecord> completed)
     {
         string body = JsonUtility.ToJson(payload);
         using UnityWebRequest request = new UnityWebRequest(
@@ -88,7 +107,58 @@ public sealed class IssueApi
 
         yield return request.SendWebRequest();
 
-        completed?.Invoke(request.responseCode, ReadResponse(request));
+        IssueRecord issue = null;
+        if (request.responseCode == 201)
+        {
+            try
+            {
+                issue = JsonUtility.FromJson<IssueRecord>(
+                    request.downloadHandler?.text ?? string.Empty);
+            }
+            catch (ArgumentException)
+            {
+                // The successful status still decides success; details are optional.
+            }
+        }
+        completed?.Invoke(
+            request.responseCode,
+            ReadResponse(request),
+            issue);
+    }
+
+    public IEnumerator FetchIssues(
+        Action<long, string, IssueRecord[]> completed)
+    {
+        using UnityWebRequest request = UnityWebRequest.Get(
+            BaseUrl + "/api/issues");
+        request.downloadHandler = new DownloadHandlerBuffer();
+        request.SetRequestHeader("Accept", "application/json");
+        request.timeout = 10;
+
+        yield return request.SendWebRequest();
+
+        IssueRecord[] issues = null;
+        if (request.responseCode == 200)
+        {
+            string responseText = request.downloadHandler?.text ?? string.Empty;
+            try
+            {
+                string wrapped = "{\"items\":" + responseText + "}";
+                IssueListResponse response =
+                    JsonUtility.FromJson<IssueListResponse>(wrapped);
+                issues = response?.items;
+            }
+            catch (ArgumentException)
+            {
+                // ReadResponse below turns malformed success payloads into an error.
+            }
+        }
+        completed?.Invoke(
+            request.responseCode,
+            issues == null && request.responseCode == 200
+                ? "后端返回了无法解析的数据。"
+                : ReadResponse(request),
+            issues);
     }
 
     private static string ReadResponse(UnityWebRequest request)

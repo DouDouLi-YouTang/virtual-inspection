@@ -36,7 +36,8 @@ body {
 }
 
 button,
-select {
+select,
+input {
   font: inherit;
 }
 
@@ -45,13 +46,15 @@ button {
 }
 
 button:disabled,
-select:disabled {
+select:disabled,
+input:disabled {
   cursor: wait;
   opacity: 0.6;
 }
 
 button:focus-visible,
-select:focus-visible {
+select:focus-visible,
+input:focus-visible {
   outline: 3px solid rgba(208, 90, 49, 0.35);
   outline-offset: 2px;
 }
@@ -367,9 +370,9 @@ select:focus-visible {
 
 .card-footer {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 14px;
   margin-top: auto;
   padding-top: 15px;
   border-top: 1px dashed #cfd5cc;
@@ -377,6 +380,7 @@ select:focus-visible {
 
 .details {
   display: flex;
+  justify-content: space-between;
   gap: 24px;
   margin: 0;
 }
@@ -416,6 +420,231 @@ select:focus-visible {
   background: #fffdf8;
   color: var(--ink);
   font-size: 0.82rem;
+}
+
+.card-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.details-button,
+.delete-button {
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid #b8c2b9;
+  border-radius: 0;
+  background: #fffdf8;
+  color: var(--ink);
+  font-size: 0.78rem;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.details-button:hover {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.delete-button {
+  border-color: #d9a9a1;
+  color: var(--red);
+}
+
+.delete-button:hover {
+  background: var(--red);
+  color: #fff8ef;
+}
+
+.delete-button.solid {
+  background: var(--red);
+  color: #fff8ef;
+}
+
+.filter-panel {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.4fr) minmax(145px, 0.55fr) minmax(
+      145px,
+      0.55fr
+    ) minmax(185px, auto);
+  gap: 0;
+  margin-bottom: 22px;
+  border: 1px solid var(--line);
+  background: rgba(247, 245, 238, 0.82);
+}
+
+.filter-panel > * {
+  min-width: 0;
+  padding: 12px 16px;
+  border-right: 1px solid var(--line);
+}
+
+.filter-panel > :last-child {
+  border-right: 0;
+}
+
+.search-control,
+.filter-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+}
+
+.search-control input,
+.filter-control select {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid #b8c2b9;
+  border-radius: 0;
+  background: #fffdf8;
+  color: var(--ink);
+  font-size: 0.84rem;
+}
+
+.filter-result {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.filter-result strong {
+  color: var(--accent);
+  font-family: 'Oswald', 'Microsoft YaHei', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+
+.filter-result button {
+  margin-left: auto;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+}
+
+.state-panel.compact {
+  min-height: 190px;
+  flex-direction: column;
+  gap: 3px;
+  padding: 28px;
+  text-align: center;
+}
+
+.detail-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  overflow-y: auto;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(25, 34, 29, 0.42);
+  backdrop-filter: blur(2px);
+  animation: fade-in 180ms ease both;
+}
+
+.detail-drawer {
+  overflow-y: auto;
+  width: min(480px, calc(100% - 24px));
+  height: 100vh;
+  padding: 32px;
+  border-left: 7px solid var(--accent);
+  background: var(--paper);
+  box-shadow: -16px 0 38px rgba(25, 34, 29, 0.18);
+  animation: drawer-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.detail-id {
+  margin: 7px 0 0;
+  color: #929b96;
+  font-family: 'Oswald', 'Microsoft YaHei', sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+.detail-close {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.detail-close:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.detail-drawer h2 {
+  margin: 30px 0 14px;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  line-height: 1.4;
+}
+
+.detail-description {
+  min-height: 70px;
+  margin: 0 0 28px;
+  color: #4e5a54;
+  font-size: 0.92rem;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.detail-facts {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.detail-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-facts dt {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+}
+
+.detail-facts dd {
+  margin: 0;
+  font-family: 'Oswald', 'Microsoft YaHei', sans-serif;
+  font-size: 0.84rem;
+  text-align: right;
+}
+
+.detail-footer {
+  display: flex;
+  gap: 10px;
+  margin-top: 30px;
+}
+
+.detail-footer button {
+  flex: 1;
 }
 
 .error-panel {
@@ -538,6 +767,26 @@ footer {
   }
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 @media (max-width: 900px) {
   .app-shell {
     width: min(100% - 28px, 700px);
@@ -576,6 +825,23 @@ footer {
   .issue-grid {
     grid-template-columns: 1fr;
   }
+
+  .filter-panel {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filter-panel > * {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .filter-panel > :nth-child(2) {
+    border-right: 0;
+  }
+
+  .filter-panel > :last-child {
+    grid-column: 1 / -1;
+    border-bottom: 0;
+  }
 }
 
 @media (max-width: 520px) {
@@ -606,12 +872,23 @@ footer {
     flex-direction: column;
   }
 
+  .card-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
   .status-control {
     width: 100%;
   }
 
   .status-control select {
     width: 100%;
+  }
+
+  .details-button,
+  .delete-button {
+    flex: 1;
   }
 
   .details {
@@ -621,6 +898,23 @@ footer {
 
   .error-panel {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .filter-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-panel > * {
+    border-right: 0;
+  }
+
+  .detail-drawer {
+    width: calc(100% - 12px);
+    padding: 24px 20px;
+  }
+
+  .detail-footer {
     flex-direction: column;
   }
 

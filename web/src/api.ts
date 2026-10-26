@@ -69,3 +69,9 @@ export function updateIssueStatus(
   })
 }
 
+export async function deleteIssue(id: string): Promise<void> {
+  await request<null>(`/api/issues/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
+

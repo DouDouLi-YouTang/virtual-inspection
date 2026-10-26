@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   useMutation,
   useQuery,
   useQueryClient,
   type QueryKey,
 } from '@tanstack/react-query'
-import { fetchIssues, updateIssueStatus } from './api'
+import { deleteIssue, fetchIssues, updateIssueStatus } from './api'
 import type { Issue, IssueStatus, Priority } from './types'
 
 const issuesQueryKey: QueryKey = ['issues']
@@ -39,14 +39,23 @@ function formatTime(value: string) {
 function IssueCard({
   issue,
   onStatusChange,
+  onOpenDetails,
+  onDelete,
   isUpdating,
+  isDeleting,
 }: {
   issue: Issue
   onStatusChange: (status: IssueStatus) => void
+  onOpenDetails: () => void
+  onDelete: () => void
   isUpdating: boolean
+  isDeleting: boolean
 }) {
   return (
-    <article className={`issue-card priority-${issue.priority}`}>
+    <article
+      className={`issue-card priority-${issue.priority}`}
+      aria-label={issue.title}
+    >
       <div className="card-rail" aria-hidden="true" />
       <div className="card-heading">
         <div>
@@ -82,25 +91,142 @@ function IssueCard({
           </div>
         </dl>
 
-        <label className="status-control">
-          <span>处理状态</span>
-          <select
-            value={issue.status}
-            disabled={isUpdating}
-            onChange={(event) =>
-              onStatusChange(event.target.value as IssueStatus)
-            }
-            aria-label={`修改“${issue.title}”的处理状态`}
+        <div className="card-actions">
+          <label className="status-control">
+            <span>处理状态</span>
+            <select
+              value={issue.status}
+              disabled={isUpdating || isDeleting}
+              onChange={(event) =>
+                onStatusChange(event.target.value as IssueStatus)
+              }
+              aria-label={`修改“${issue.title}”的处理状态`}
+            >
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {statusLabels[status]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="details-button"
+            type="button"
+            onClick={onOpenDetails}
           >
-            {statusOptions.map((status) => (
-              <option key={status} value={status}>
-                {statusLabels[status]}
-              </option>
-            ))}
-          </select>
-        </label>
+            查看详情
+          </button>
+          <button
+            className="delete-button"
+            type="button"
+            onClick={onDelete}
+            disabled={isDeleting}
+            aria-label={`删除“${issue.title}”`}
+          >
+            {isDeleting ? '删除中…' : '删除'}
+          </button>
+        </div>
       </div>
     </article>
+  )
+}
+
+function IssueDetail({
+  issue,
+  onClose,
+  onDelete,
+  isDeleting,
+}: {
+  issue: Issue
+  onClose: () => void
+  onDelete: () => void
+  isDeleting: boolean
+}) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose])
+
+  return (
+    <div className="detail-backdrop" role="presentation" onClick={onClose}>
+      <aside
+        className="detail-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="detail-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="detail-heading">
+          <div>
+            <span className={`priority-badge ${issue.priority}`}>
+              {priorityLabels[issue.priority]}优先级
+            </span>
+            <p className="detail-id">#{issue.id}</p>
+          </div>
+          <button
+            className="detail-close"
+            type="button"
+            onClick={onClose}
+            aria-label="关闭详情"
+          >
+            ×
+          </button>
+        </div>
+        <h2 id="detail-title">{issue.title}</h2>
+        <p className="detail-description">
+          {issue.description || '未填写问题描述'}
+        </p>
+        <dl className="detail-facts">
+          <div>
+            <dt>当前状态</dt>
+            <dd>{statusLabels[issue.status]}</dd>
+          </div>
+          <div>
+            <dt>现场坐标</dt>
+            <dd>
+              X {issue.position.x.toFixed(2)} · Y{' '}
+              {issue.position.y.toFixed(2)} · Z{' '}
+              {issue.position.z.toFixed(2)}
+            </dd>
+          </div>
+          <div>
+            <dt>上报时间</dt>
+            <dd>{formatTime(issue.createdAt)}</dd>
+          </div>
+          <div>
+            <dt>最后更新</dt>
+            <dd>{formatTime(issue.updatedAt)}</dd>
+          </div>
+        </dl>
+        <div className="detail-footer">
+          <button
+            className="delete-button solid"
+            type="button"
+            onClick={onDelete}
+            disabled={isDeleting}
+          >
+            {isDeleting ? '删除中…' : '删除此问题'}
+          </button>
+          <button
+            className="details-button"
+            type="button"
+            onClick={onClose}
+          >
+            返回列表
+          </button>
+        </div>
+      </aside>
+    </div>
   )
 }
 
@@ -108,6 +234,11 @@ export default function App() {
   const queryClient = useQueryClient()
   const [updateError, setUpdateError] = useState('')
   const [updatingId, setUpdatingId] = useState('')
+  const [deletingId, setDeletingId] = useState('')
+  const [keyword, setKeyword] = useState('')
+  const [statusFilter, setStatusFilter] = useState<IssueStatus | 'all'>('all')
+  const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all')
+  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
 
   const issuesQuery = useQuery({
     queryKey: issuesQueryKey,
@@ -140,9 +271,54 @@ export default function App() {
     },
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteIssue(id),
+    onMutate: (id) => {
+      setUpdateError('')
+      setDeletingId(id)
+    },
+    onSuccess: () => {
+      setSelectedIssue(null)
+      queryClient.invalidateQueries({ queryKey: issuesQueryKey })
+    },
+    onError: (error) => {
+      setUpdateError(
+        error instanceof Error ? error.message : '删除失败，请稍后重试。',
+      )
+    },
+    onSettled: () => {
+      setDeletingId('')
+    },
+  })
+
   const issueCount = issuesQuery.data?.length ?? 0
   const openCount =
     issuesQuery.data?.filter((issue) => issue.status !== 'resolved').length ?? 0
+  const filteredIssues = useMemo(() => {
+    const normalizedKeyword = keyword.trim().toLowerCase()
+    return (issuesQuery.data ?? []).filter((issue) => {
+      const matchesKeyword =
+        normalizedKeyword.length === 0 ||
+        issue.title.toLowerCase().includes(normalizedKeyword) ||
+        issue.description.toLowerCase().includes(normalizedKeyword) ||
+        issue.id.toLowerCase().includes(normalizedKeyword)
+      const matchesStatus =
+        statusFilter === 'all' || issue.status === statusFilter
+      const matchesPriority =
+        priorityFilter === 'all' || issue.priority === priorityFilter
+      return matchesKeyword && matchesStatus && matchesPriority
+    })
+  }, [issuesQuery.data, keyword, priorityFilter, statusFilter])
+  const hasActiveFilters =
+    keyword.trim().length > 0 ||
+    statusFilter !== 'all' ||
+    priorityFilter !== 'all'
+
+  function confirmDelete(issue: Issue) {
+    if (window.confirm(`确定删除“${issue.title}”吗？删除后不可恢复。`)) {
+      deleteMutation.mutate(issue.id)
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -234,25 +410,120 @@ export default function App() {
 
         {issuesQuery.isSuccess && issueCount > 0 && (
           <section className="issue-section">
+            <div className="filter-panel" aria-label="筛选问题">
+              <label className="search-control">
+                <span>搜索</span>
+                <input
+                  type="search"
+                  value={keyword}
+                  onChange={(event) => setKeyword(event.target.value)}
+                  placeholder="标题、描述或问题 ID"
+                />
+              </label>
+              <label className="filter-control">
+                <span>状态</span>
+                <select
+                  value={statusFilter}
+                  onChange={(event) =>
+                    setStatusFilter(
+                      event.target.value as IssueStatus | 'all',
+                    )
+                  }
+                >
+                  <option value="all">全部状态</option>
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {statusLabels[status]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-control">
+                <span>优先级</span>
+                <select
+                  value={priorityFilter}
+                  onChange={(event) =>
+                    setPriorityFilter(
+                      event.target.value as Priority | 'all',
+                    )
+                  }
+                >
+                  <option value="all">全部优先级</option>
+                  <option value="high">高优先级</option>
+                  <option value="medium">中优先级</option>
+                  <option value="low">低优先级</option>
+                </select>
+              </label>
+              <div className="filter-result">
+                <span>显示</span>
+                <strong>{filteredIssues.length}</strong>
+                <span>/ {issueCount} 项</span>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKeyword('')
+                      setStatusFilter('all')
+                      setPriorityFilter('all')
+                    }}
+                  >
+                    清除筛选
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="section-heading">
               <h2>现场问题</h2>
-              <span>按上报时间倒序</span>
+              <span>
+                {hasActiveFilters
+                  ? `已筛选 ${filteredIssues.length} 项`
+                  : '按上报时间倒序'}
+              </span>
             </div>
-            <div className="issue-grid">
-              {issuesQuery.data.map((issue) => (
-                <IssueCard
-                  key={issue.id}
-                  issue={issue}
-                  isUpdating={updatingId === issue.id}
-                  onStatusChange={(status) =>
-                    updateMutation.mutate({ id: issue.id, status })
-                  }
-                />
-              ))}
-            </div>
+            {filteredIssues.length === 0 ? (
+              <section className="state-panel empty compact">
+                <h2>没有符合筛选条件的问题</h2>
+                <p>调整关键词、状态或优先级后重试。</p>
+              </section>
+            ) : (
+              <div className="issue-grid">
+                {filteredIssues.map((issue) => (
+                  <IssueCard
+                    key={issue.id}
+                    issue={issue}
+                    isUpdating={updatingId === issue.id}
+                    isDeleting={deletingId === issue.id}
+                    onOpenDetails={() => setSelectedIssue(issue)}
+                    onDelete={() => confirmDelete(issue)}
+                    onStatusChange={(status) =>
+                      updateMutation.mutate({ id: issue.id, status })
+                    }
+                  />
+                ))}
+              </div>
+            )}
           </section>
         )}
       </main>
+
+      {selectedIssue && (
+        <IssueDetail
+          issue={
+            issuesQuery.data?.find(
+              (issue) => issue.id === selectedIssue.id,
+            ) ?? selectedIssue
+          }
+          onClose={() => setSelectedIssue(null)}
+          onDelete={() =>
+            confirmDelete(
+              issuesQuery.data?.find(
+                (issue) => issue.id === selectedIssue.id,
+              ) ?? selectedIssue,
+            )
+          }
+          isDeleting={deletingId === selectedIssue.id}
+        />
+      )}
 
       <footer>
         <span>INSPECTION CONTROL</span>

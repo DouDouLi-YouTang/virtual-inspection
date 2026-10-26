@@ -82,7 +82,7 @@ func newRouter(db *gorm.DB) *gin.Engine {
 			"http://127.0.0.1:5173",
 			"http://localhost:5173",
 		},
-		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodOptions},
+		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept"},
 		MaxAge:       12 * time.Hour,
 	}))
@@ -161,6 +161,18 @@ func newRouter(db *gorm.DB) *gin.Engine {
 			return
 		}
 		c.JSON(http.StatusOK, issue)
+	})
+	api.DELETE("/issues/:id", func(c *gin.Context) {
+		result := db.Delete(&Issue{}, "id = ?", c.Param("id"))
+		if result.Error != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "failed to delete issue"})
+			return
+		}
+		if result.RowsAffected == 0 {
+			c.JSON(http.StatusNotFound, ErrorResponse{Error: "issue not found"})
+			return
+		}
+		c.Status(http.StatusNoContent)
 	})
 
 	return router

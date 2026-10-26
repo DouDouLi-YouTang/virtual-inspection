@@ -42,4 +42,7 @@ Thumbs.db
 unity-*.log
 web-inspection.png
 web-*.png
+/Unity Hub/
+.unity-*.log
+.unity-*.xml
 

@@ -203,3 +203,27 @@ func TestDataSurvivesDatabaseReopen(t *testing.T) {
 	}
 }
 
+func TestDeleteIssue(t *testing.T) {
+	api := setupAPI(t)
+	created := decodeIssue(t, api.request(t, http.MethodPost, "/api/issues", validIssue()))
+
+	deleted := api.request(t, http.MethodDelete, "/api/issues/"+created.ID, nil)
+	if deleted.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d, body = %s", deleted.Code, deleted.Body.String())
+	}
+
+	listResponse := api.request(t, http.MethodGet, "/api/issues", nil)
+	var issues []Issue
+	if err := json.Unmarshal(listResponse.Body.Bytes(), &issues); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(issues) != 0 {
+		t.Fatalf("expected empty list after delete, got %+v", issues)
+	}
+
+	missing := api.request(t, http.MethodDelete, "/api/issues/"+created.ID, nil)
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("second delete status = %d", missing.Code)
+	}
+}
+

@@ -7,14 +7,21 @@ public sealed class InspectionApp : MonoBehaviour
 {
     private Camera inspectionCamera;
     private CharacterController characterController;
+    private Transform viewRoot;
     private Transform pendingMarker;
     private Vector3 pendingHitPoint;
     private CanvasGroup formGroup;
+    private CanvasGroup markerInfoGroup;
     private InputField titleInput;
     private InputField descriptionInput;
-    private Dropdown priorityDropdown;
+    private int priorityIndex = 1;
+    private Button[] priorityButtons;
     private Text positionText;
     private Text statusText;
+    private Text markerInfoTitle;
+    private Text markerInfoMeta;
+    private Text markerInfoDescription;
+    private Image crosshair;
     private Button submitButton;
     private Button cancelButton;
     private Text submitLabel;
@@ -27,6 +34,7 @@ public sealed class InspectionApp : MonoBehaviour
     private static readonly Color Accent = new Color(0.86f, 0.35f, 0.16f);
     private static readonly Color Ink = new Color(0.12f, 0.16f, 0.15f);
     private static readonly Color Paper = new Color(0.96f, 0.95f, 0.91f);
+    private static readonly Color UnselectedPriority = new Color(0.87f, 0.88f, 0.83f);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void EnsureAppExists()
@@ -43,6 +51,7 @@ public sealed class InspectionApp : MonoBehaviour
     {
         BuildScene();
         BuildInterface();
+        StartCoroutine(LoadSavedMarkers());
         SetFormVisible(false);
         SetStatus("点击机柜、管线或地面放置问题标记", false);
         initialized = true;
@@ -57,12 +66,13 @@ public sealed class InspectionApp : MonoBehaviour
 
         HandleMovement();
         HandleLook();
+        UpdateAimFeedback();
         HandlePlacementClick();
     }
 
     private void HandleMovement()
     {
-        if (formGroup.interactable
+        if (IsModalOpen
             || titleInput.isFocused
             || descriptionInput.isFocused)
         {
@@ -87,7 +97,7 @@ public sealed class InspectionApp : MonoBehaviour
 
     private void HandleLook()
     {
-        if (formGroup.interactable)
+        if (IsModalOpen)
         {
             ReleaseCursor();
             return;
@@ -109,9 +119,15 @@ public sealed class InspectionApp : MonoBehaviour
             return;
         }
 
-        float yaw = Input.GetAxisRaw("Mouse X") * 3f;
-        float pitch = -Input.GetAxisRaw("Mouse Y") * 3f;
-        transform.Rotate(0f, yaw, 0f, Space.World);
+        ApplyLook(
+            Input.GetAxisRaw("Mouse X") * 3f,
+            -Input.GetAxisRaw("Mouse Y") * 3f);
+    }
+
+    private void ApplyLook(float yaw, float pitch)
+    {
+        Transform root = viewRoot != null ? viewRoot : transform;
+        root.Rotate(0f, yaw, 0f, Space.World);
         cameraPitch = Mathf.Clamp(cameraPitch + pitch, -70f, 70f);
         inspectionCamera.transform.localRotation = Quaternion.Euler(cameraPitch, 0f, 0f);
     }
@@ -119,7 +135,7 @@ public sealed class InspectionApp : MonoBehaviour
     private void HandlePlacementClick()
     {
         if (cursorLocked
-            || formGroup.interactable
+            || IsModalOpen
             || submitting
             || pendingMarker != null)
         {
@@ -140,9 +156,86 @@ public sealed class InspectionApp : MonoBehaviour
             return;
         }
 
+        SavedIssueMarker savedMarker =
+            hit.collider.GetComponent<SavedIssueMarker>();
+        if (savedMarker != null)
+        {
+            if (savedMarker.Issue != null)
+            {
+                ShowMarkerInfo(savedMarker.Issue);
+            }
+            return;
+        }
+
         pendingHitPoint = hit.point;
         CreatePendingMarker(hit.point, hit.normal);
         OpenForm();
+    }
+
+    private void UpdateAimFeedback()
+    {
+        if (IsModalOpen
+            || EventSystem.current != null
+            && EventSystem.current.IsPointerOverGameObject())
+        {
+            crosshair.color = new Color(1f, 1f, 1f, 0.35f);
+            return;
+        }
+
+        Vector2 screenPoint = cursorLocked
+            ? new Vector2(Screen.width * 0.5f, Screen.height * 0.5f)
+            : (Vector2)Input.mousePosition;
+        Ray ray = inspectionCamera.ScreenPointToRay(screenPoint);
+        bool hasTarget = Physics.Raycast(ray, out RaycastHit hit, 100f);
+        crosshair.color = hasTarget
+            ? new Color(0.96f, 0.45f, 0.23f, 0.95f)
+            : new Color(1f, 1f, 1f, 0.35f);
+    }
+
+    private IEnumerator LoadSavedMarkers()
+    {
+        yield return new IssueApi().FetchIssues(
+            (responseCode, error, issues) =>
+            {
+                if (responseCode != 200 || issues == null)
+                {
+                    SetStatus(
+                        string.IsNullOrWhiteSpace(error)
+                            ? "已保存标记加载失败，但不影响现场上报。"
+                            : $"已保存标记加载失败：{error}",
+                        true);
+                    return;
+                }
+                foreach (IssueRecord issue in issues)
+                {
+                    CreateSavedMarker(issue);
+                }
+                if (issues.Length > 0)
+                {
+                    SetStatus(
+                        $"已恢复 {issues.Length} 个已保存标记，可点击标记查看信息",
+                        false);
+                }
+            });
+    }
+
+    private void CreateSavedMarker(IssueRecord issue)
+    {
+        if (issue?.position == null)
+        {
+            return;
+        }
+
+        GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        marker.name = "SavedIssueMarker";
+        marker.transform.position = new Vector3(
+            issue.position.x,
+            issue.position.y,
+            issue.position.z) + Vector3.up * 0.11f;
+        marker.transform.localScale = Vector3.one * 0.25f;
+        marker.transform.SetParent(savedMarkersRoot.transform, true);
+        ApplyMarkerMaterial(marker);
+        marker.AddComponent<SavedIssueMarker>().Issue = issue;
     }
 
     private void CreatePendingMarker(Vector3 point, Vector3 normal)
@@ -156,12 +249,10 @@ public sealed class InspectionApp : MonoBehaviour
         marker.transform.localScale = Vector3.one * 0.22f;
         marker.transform.SetParent(savedMarkersRoot.transform, true);
         Collider markerCollider = marker.GetComponent<Collider>();
-        if (markerCollider != null)
-        {
-            Destroy(markerCollider);
-        }
+        markerCollider.isTrigger = true;
 
         ApplyMarkerMaterial(marker);
+        marker.AddComponent<SavedIssueMarker>().Issue = null;
         pendingMarker = marker.transform;
     }
 
@@ -180,8 +271,7 @@ public sealed class InspectionApp : MonoBehaviour
         ReleaseCursor();
         titleInput.text = string.Empty;
         descriptionInput.text = string.Empty;
-        priorityDropdown.value = 1;
-        priorityDropdown.RefreshShownValue();
+        SelectPriority(1);
         SetFormInteractable(true);
         positionText.text =
             $"X {pendingHitPoint.x:F2}   Y {pendingHitPoint.y:F2}   Z {pendingHitPoint.z:F2}";
@@ -235,12 +325,15 @@ public sealed class InspectionApp : MonoBehaviour
         IssueCreatePayload payload = IssueApi.BuildPayload(
             title,
             descriptionInput.text,
-            priorityDropdown.value,
+            priorityIndex,
             pendingHitPoint);
         StartCoroutine(new IssueApi().CreateIssue(payload, OnCreateCompleted));
     }
 
-    private void OnCreateCompleted(long responseCode, string error)
+    private void OnCreateCompleted(
+        long responseCode,
+        string error,
+        IssueRecord savedIssue)
     {
         submitting = false;
         SetFormInteractable(true);
@@ -251,6 +344,8 @@ public sealed class InspectionApp : MonoBehaviour
             if (pendingMarker != null)
             {
                 pendingMarker.name = "SavedIssueMarker";
+                pendingMarker.GetComponent<SavedIssueMarker>().Issue =
+                    savedIssue;
                 pendingMarker = null;
             }
             pendingHitPoint = Vector3.zero;
@@ -277,11 +372,17 @@ public sealed class InspectionApp : MonoBehaviour
         formGroup.blocksRaycasts = visible;
     }
 
+    private bool IsModalOpen =>
+        formGroup.interactable || markerInfoGroup.interactable;
+
     private void SetFormInteractable(bool value)
     {
         titleInput.interactable = value;
         descriptionInput.interactable = value;
-        priorityDropdown.interactable = value;
+        foreach (Button button in priorityButtons)
+        {
+            button.interactable = value;
+        }
         submitButton.interactable = value;
         cancelButton.interactable = value;
     }
@@ -325,6 +426,7 @@ public sealed class InspectionApp : MonoBehaviour
 
         GameObject player = new GameObject("InspectionPlayer");
         player.transform.position = new Vector3(0f, 0.85f, -7.5f);
+        viewRoot = player.transform;
         characterController = player.AddComponent<CharacterController>();
         characterController.height = 1.7f;
         characterController.radius = 0.3f;
@@ -455,6 +557,151 @@ public sealed class InspectionApp : MonoBehaviour
 
         CreateHud(canvasObject.transform);
         CreateForm(canvasObject.transform);
+        CreateMarkerInfo(canvasObject.transform);
+        CreateCrosshair(canvasObject.transform);
+    }
+
+    private void CreateMarkerInfo(Transform canvas)
+    {
+        GameObject overlay = new GameObject(
+            "Marker Info Overlay",
+            typeof(RectTransform),
+            typeof(CanvasGroup));
+        overlay.transform.SetParent(canvas, false);
+        RectTransform overlayRect = overlay.GetComponent<RectTransform>();
+        overlayRect.anchorMin = Vector2.zero;
+        overlayRect.anchorMax = Vector2.one;
+        overlayRect.offsetMin = Vector2.zero;
+        overlayRect.offsetMax = Vector2.zero;
+        markerInfoGroup = overlay.GetComponent<CanvasGroup>();
+
+        GameObject panel = CreatePanel(
+            overlay.transform,
+            "Marker Info",
+            new Color(0.96f, 0.95f, 0.91f, 0.97f));
+        SetRect(
+            panel.GetComponent<RectTransform>(),
+            new Vector2(0f, 0f),
+            new Vector2(0f, 0f),
+            new Vector2(30f, 70f),
+            new Vector2(430f, 390f));
+
+        markerInfoTitle = CreateText(
+            panel.transform,
+            string.Empty,
+            25,
+            Ink,
+            TextAnchor.UpperLeft,
+            new Vector2(24f, -24f),
+            new Vector2(350f, 72f),
+            new Vector2(0f, 1f));
+        markerInfoMeta = CreateText(
+            panel.transform,
+            string.Empty,
+            14,
+            Accent,
+            TextAnchor.UpperLeft,
+            new Vector2(24f, -105f),
+            new Vector2(350f, 28f),
+            new Vector2(0f, 1f));
+        markerInfoDescription = CreateText(
+            panel.transform,
+            string.Empty,
+            16,
+            new Color(0.29f, 0.34f, 0.31f),
+            TextAnchor.UpperLeft,
+            new Vector2(24f, -143f),
+            new Vector2(350f, 120f),
+            new Vector2(0f, 1f));
+        markerInfoDescription.horizontalOverflow =
+            HorizontalWrapMode.Wrap;
+        markerInfoDescription.verticalOverflow =
+            VerticalWrapMode.Truncate;
+
+        Button close = CreateButton(
+            panel.transform,
+            "关闭",
+            new Color(0.83f, 0.85f, 0.8f),
+            Ink,
+            new Vector2(24f, -290f),
+            new Vector2(150f, 44f));
+        close.onClick.AddListener(CloseMarkerInfo);
+        SetMarkerInfoVisible(false);
+    }
+
+    private void ShowMarkerInfo(IssueRecord issue)
+    {
+        markerInfoTitle.text = issue.title;
+        markerInfoMeta.text =
+            $"{StatusLabel(issue.status)} · {PriorityLabel(issue.priority)}优先级";
+        markerInfoDescription.text =
+            string.IsNullOrWhiteSpace(issue.description)
+                ? "未填写问题描述"
+                : issue.description;
+        SetMarkerInfoVisible(true);
+        ReleaseCursor();
+        SetStatus("已打开标记详情，点击关闭返回现场", false);
+    }
+
+    private void CloseMarkerInfo()
+    {
+        SetMarkerInfoVisible(false);
+        EventSystem.current?.SetSelectedGameObject(null);
+        SetStatus("已返回现场，可继续观察或上报问题", false);
+    }
+
+    private void SetMarkerInfoVisible(bool visible)
+    {
+        markerInfoGroup.alpha = visible ? 1f : 0f;
+        markerInfoGroup.interactable = visible;
+        markerInfoGroup.blocksRaycasts = visible;
+    }
+
+    private static string StatusLabel(string status)
+    {
+        switch (status)
+        {
+            case "in_progress":
+                return "处理中";
+            case "resolved":
+                return "已解决";
+            default:
+                return "待处理";
+        }
+    }
+
+    private static string PriorityLabel(string priority)
+    {
+        switch (priority)
+        {
+            case "high":
+                return "高";
+            case "low":
+                return "低";
+            default:
+                return "中";
+        }
+    }
+
+    private void CreateCrosshair(Transform canvas)
+    {
+        GameObject crosshairObject = new GameObject(
+            "Crosshair",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image));
+        crosshairObject.transform.SetParent(canvas, false);
+        RectTransform rect = crosshairObject.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.sizeDelta = new Vector2(18f, 18f);
+        rect.anchoredPosition = Vector2.zero;
+        crosshair = crosshairObject.GetComponent<Image>();
+        crosshair.sprite = Resources.GetBuiltinResource<Sprite>(
+            "UI/Skin/Knob.psd");
+        crosshair.color = new Color(1f, 1f, 1f, 0.35f);
+        crosshair.raycastTarget = false;
     }
 
     private void CreateHud(Transform canvas)
@@ -473,7 +720,7 @@ public sealed class InspectionApp : MonoBehaviour
         GameObject legend = CreatePanel(canvas, "Legend", new Color(0.96f, 0.95f, 0.91f, 0.91f));
         SetRect(legend.GetComponent<RectTransform>(), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-278f, -150f), new Vector2(-20f, -108f));
         CreateText(legend.transform, "场景检查点", 17, Ink, TextAnchor.MiddleLeft, new Vector2(18f, -10f), new Vector2(220f, 28f), new Vector2(0f, 1f));
-        CreateText(legend.transform, "1 号机柜  /  2 号机柜\n冷却管线  /  地面与墙面", 14, new Color(0.34f, 0.39f, 0.36f), TextAnchor.UpperLeft, new Vector2(18f, -43f), new Vector2(220f, 60f), new Vector2(0f, 1f));
+        CreateText(legend.transform, "1 号机柜 / 2 号机柜 / 冷却管线\n点击设备放置问题；点击已保存标记查看", 14, new Color(0.34f, 0.39f, 0.36f), TextAnchor.UpperLeft, new Vector2(18f, -43f), new Vector2(220f, 60f), new Vector2(0f, 1f));
     }
 
     private void CreateForm(Transform canvas)
@@ -503,7 +750,7 @@ public sealed class InspectionApp : MonoBehaviour
         descriptionInput.lineType = InputField.LineType.MultiLineNewline;
 
         CreateText(panel.transform, "优先级", 14, new Color(0.43f, 0.48f, 0.44f), TextAnchor.MiddleLeft, new Vector2(29f, -310f), new Vector2(110f, 24f), new Vector2(0f, 1f));
-        priorityDropdown = CreateDropdown(panel.transform, new Vector2(29f, -334f));
+        CreatePrioritySelector(panel.transform, 334f);
 
         submitButton = CreateButton(panel.transform, "提交问题", Accent, Color.white, new Vector2(29f, -404f), new Vector2(260f, 48f));
         submitLabel = submitButton.GetComponentInChildren<Text>();
@@ -529,69 +776,46 @@ public sealed class InspectionApp : MonoBehaviour
         return field;
     }
 
-    private Dropdown CreateDropdown(Transform parent, Vector2 anchoredPosition)
+    private void CreatePrioritySelector(Transform parent, float y)
     {
-        GameObject dropdownObject = CreatePanel(parent, "Priority", Color.white);
-        RectTransform rect = dropdownObject.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0f, 1f);
-        rect.anchorMax = new Vector2(0f, 1f);
-        rect.pivot = new Vector2(0f, 1f);
-        rect.anchoredPosition = anchoredPosition;
-        rect.sizeDelta = new Vector2(180f, 44f);
+        string[] labels = { "低", "中", "高" };
+        GameObject selector = new GameObject("Priority Selector", typeof(RectTransform));
+        selector.transform.SetParent(parent, false);
+        RectTransform selectorRect = selector.GetComponent<RectTransform>();
+        selectorRect.anchorMin = new Vector2(0f, 1f);
+        selectorRect.anchorMax = new Vector2(0f, 1f);
+        selectorRect.pivot = new Vector2(0f, 1f);
+        selectorRect.anchoredPosition = new Vector2(0f, -y);
+        selectorRect.sizeDelta = new Vector2(380f, 44f);
 
-        Text caption = CreateText(dropdownObject.transform, "中", 16, Ink, TextAnchor.MiddleLeft, new Vector2(12f, 0f), new Vector2(125f, 34f), new Vector2(0f, 0.5f));
-        Dropdown dropdown = dropdownObject.AddComponent<Dropdown>();
-        dropdown.targetGraphic = dropdownObject.GetComponent<Image>();
-        dropdown.captionText = caption;
-        dropdown.options = new System.Collections.Generic.List<Dropdown.OptionData>
+        priorityButtons = new Button[labels.Length];
+        for (int i = 0; i < labels.Length; i++)
         {
-            new Dropdown.OptionData("低"),
-            new Dropdown.OptionData("中"),
-            new Dropdown.OptionData("高")
-        };
-        dropdown.value = 1;
+            int index = i;
+            Button button = CreateButton(
+                selector.transform,
+                labels[i],
+                Color.white,
+                Ink,
+                new Vector2(29f + i * 124f, 0f),
+                new Vector2(116f, 44f));
+            button.onClick.AddListener(() => SelectPriority(index));
+            priorityButtons[i] = button;
+        }
+        SelectPriority(1);
+    }
 
-        GameObject template = CreatePanel(dropdownObject.transform, "Template", Color.white);
-        RectTransform templateRect = template.GetComponent<RectTransform>();
-        templateRect.anchorMin = new Vector2(0f, 0f);
-        templateRect.anchorMax = new Vector2(1f, 0f);
-        templateRect.pivot = new Vector2(0.5f, 1f);
-        templateRect.anchoredPosition = new Vector2(0f, -2f);
-        templateRect.sizeDelta = new Vector2(0f, 120f);
-        template.SetActive(false);
-        dropdown.template = templateRect;
-
-        GameObject viewport = CreatePanel(template.transform, "Viewport", Color.white);
-        RectTransform viewportRect = viewport.GetComponent<RectTransform>();
-        viewportRect.anchorMin = Vector2.zero;
-        viewportRect.anchorMax = Vector2.one;
-        viewportRect.offsetMin = new Vector2(4f, 4f);
-        viewportRect.offsetMax = new Vector2(-4f, -4f);
-        viewport.AddComponent<Mask>().showMaskGraphic = false;
-
-        GameObject content = new GameObject("Content", typeof(RectTransform));
-        content.transform.SetParent(viewport.transform, false);
-        RectTransform contentRect = content.GetComponent<RectTransform>();
-        contentRect.anchorMin = new Vector2(0f, 1f);
-        contentRect.anchorMax = new Vector2(1f, 1f);
-        contentRect.pivot = new Vector2(0.5f, 1f);
-        contentRect.anchoredPosition = Vector2.zero;
-        contentRect.sizeDelta = new Vector2(0f, 120f);
-
-        GameObject item = CreatePanel(content.transform, "Item", Color.white);
-        RectTransform itemRect = item.GetComponent<RectTransform>();
-        itemRect.anchorMin = new Vector2(0f, 0.5f);
-        itemRect.anchorMax = new Vector2(1f, 0.5f);
-        itemRect.sizeDelta = new Vector2(0f, 40f);
-        CreateText(item.transform, "中", 15, Ink, TextAnchor.MiddleLeft, new Vector2(10f, 0f), new Vector2(140f, 32f), new Vector2(0f, 0.5f));
-        Toggle toggle = item.AddComponent<Toggle>();
-        GameObject checkmark = CreatePanel(item.transform, "Checkmark", Accent);
-        SetRect(checkmark.GetComponent<RectTransform>(), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(4f, -3f), new Vector2(10f, 3f));
-        toggle.targetGraphic = item.GetComponent<Image>();
-        toggle.graphic = checkmark.GetComponent<Image>();
-        dropdown.itemText = item.transform.GetChild(0).GetComponent<Text>();
-        dropdown.captionText = caption;
-        return dropdown;
+    private void SelectPriority(int index)
+    {
+        priorityIndex = index;
+        for (int i = 0; i < priorityButtons.Length; i++)
+        {
+            bool selected = i == index;
+            Image background = priorityButtons[i].GetComponent<Image>();
+            Text label = priorityButtons[i].GetComponentInChildren<Text>();
+            background.color = selected ? Accent : UnselectedPriority;
+            label.color = selected ? Color.white : Ink;
+        }
     }
 
     private static Button CreateButton(Transform parent, string label, Color background, Color foreground, Vector2 anchoredPosition, Vector2 size)

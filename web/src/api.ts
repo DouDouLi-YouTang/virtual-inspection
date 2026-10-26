@@ -31,6 +31,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       body = JSON.parse(text)
     } catch {
+      if (!response.ok) {
+        throw new ApiError(
+          `无法连接巡检后端（HTTP ${response.status}）。`,
+          response.status,
+        )
+      }
       throw new ApiError('后端返回了无法解析的数据。', response.status)
     }
   }

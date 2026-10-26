@@ -79,6 +79,19 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: '重新连接' })).toBeInTheDocument()
   })
 
+  it('explains proxy failures that return a non-JSON response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('Bad Gateway', { status: 502 })),
+    )
+    renderApp()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '无法连接巡检后端（HTTP 502）',
+    )
+    expect(screen.getByRole('heading', { name: '问题管理台' })).toBeInTheDocument()
+  })
+
   it('patches status and refreshes the list', async () => {
     const fetchMock = vi
       .fn()

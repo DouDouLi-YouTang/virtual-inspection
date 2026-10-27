@@ -1,5 +1,7 @@
 # 虚拟巡检最小闭环
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 园区巡检人员可在 Unity 场景中点击设备或墙面，按实际射线命中点放置问题标记，填写标题、描述和优先级后提交到 Go 后端；管理人员在 React 页面查看问题并修改处理状态。
 
 本仓库完成题目必做闭环，并实现 React 筛选/详情/删除、Unity 已保存标记恢复与点击查看等加分项；不包含真实 AR、手机 AR 和登录权限。

@@ -370,3 +370,18 @@
 - 修改后采用：浏览器截图发现卡片底部信息和操作过挤，改为上下两层布局；发现详情抽屉受长页面影响未固定到视口，补充固定定位、独立滚动和滚动锁定。
 - 验证：Go 测试和 `go vet` 通过；React 生产构建、9 个 Vitest 测试和 ESLint 通过；Unity 编译通过，EditMode 10 个测试全部通过；桌面与 390px 浏览器布局实际检查。
 
+## P-011
+
+- 目标：清理工程并发布到公开 GitHub 仓库。
+
+### Prompt 原文
+
+> 按照目标需求，提交到github吧，项目开源，然后没用的文件删掉，保持仓库整洁，满足目标要求即可
+
+### 结果
+
+- 采用：补充 MIT LICENSE，并在 README 和 React 包信息中声明 MIT。
+- 采用：保留源码、Unity 必需工程配置、测试、README、AI_LOG 和启动脚本；清理 `node_modules`、`dist`、Go 二进制、SQLite 演示数据、Unity `Library/Logs/UserSettings`、Visual Studio 自动生成项目和本地 Hub 安装目录。
+- 采用：通过 GitHub REST API 创建公开仓库，并使用现有授权推送完整 Git 历史。
+- 验证：提交前重新执行 Go、React 和 Unity 检查；清理后确认没有生成物或本机数据进入 Git，仓库远端可公开访问。
+
